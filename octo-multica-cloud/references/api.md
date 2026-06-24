@@ -30,6 +30,29 @@ Agents in a workspace. Each item has `id`, `name`, `model`. Use `id` as `assigne
 ### `GET /api/runtimes?workspace_id=<ws>`
 Online daemons/runtimes for the workspace (name, provider, runtime_mode, status, device_info).
 
+### `GET /api/runtimes/<id>/usage?workspace_id=<ws>`
+Token usage for a runtime.
+
+### `GET /api/runtimes/<id>/activity?workspace_id=<ws>`
+Hourly task activity for a runtime.
+
+### `POST /api/runtimes/<id>/update?workspace_id=<ws>`
+Initiate a CLI update on the runtime.
+```json
+{"target_version": "<version>"}
+```
+Returns an update record with `id` + `status`; poll `GET /api/runtimes/<id>/update/<updateId>`
+for progress (status reaches completed/failed).
+
+### `POST /api/runtimes/<id>/archive-agents-and-delete?workspace_id=<ws>`
+⚠️ **Destructive.** Archives all agents bound to the runtime and deletes the runtime. Confirm
+with the user before calling.
+
+### Other runtime sub-endpoints (POST)
+- `POST /api/runtimes/<id>/models` — query available models for the runtime.
+- `POST /api/runtimes/<id>/local-skills` — import local skills from the runtime
+  (poll `GET /api/runtimes/<id>/local-skills/import/<importId>` for status).
+
 ## Issues
 
 ### `GET /api/issues?workspace_id=<ws>`

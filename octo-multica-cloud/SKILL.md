@@ -96,12 +96,17 @@ Full endpoint list, request/response shapes, and worked examples live in
 
 **Read:** `/api/me`, `/api/workspaces`, `/api/agents`, `/api/issues` (+ `/search`, `/<id>`,
 `/<id>/comments`, `/<id>/task-runs`, `/<id>/pull-requests`, `/<id>/subscribers`),
-`/api/projects`, `/api/runtimes`, `/health`.
+`/api/projects`, `/api/runtimes` (+ `/<id>/usage`, `/<id>/activity`), `/health`.
 
 **Write (use deliberately):** `POST /api/issues`, `PUT /api/issues/<id>`,
 `POST /api/issues/<id>/comments`, `POST /api/issues/<id>/rerun`,
 `POST /api/tasks/<taskId>/messages`, `POST /api/tasks/<taskId>/cancel`,
 `DELETE /api/comments/<id>`.
+
+**Runtime management:** `GET /api/runtimes` (list), `GET /api/runtimes/<id>/usage`,
+`GET /api/runtimes/<id>/activity`, `POST /api/runtimes/<id>/update` (upgrade the runtime CLI
+to a target version), `POST /api/runtimes/<id>/archive-agents-and-delete` (archive its agents
+and remove the runtime). ⚠️ The last one is destructive — confirm before running.
 
 ## Examples
 ```bash
