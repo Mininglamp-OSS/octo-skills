@@ -46,21 +46,68 @@ If `/api/me` returns `401 missing authorization`, the key is missing/invalid →
 - User asks to call / drive / read from `multica.imocto.cn` (the cloud multica web app).
 - Managing whatever workspace(s) their key can reach, and dispatching to that workspace's agents.
 
-## The key — never hardcode it
+## The key — never hardcode it; use the helper
 `octo-multica-key` is a user-managed stored secret (alias), not a file on disk.
-Materialize it on demand with the octo_management `write-secret` action, use it, then wipe it:
+Materialize it to a **unique temp file**, use it, and guarantee cleanup with a `trap` so the
+plaintext key can never be left on disk even if a call fails midway.
 
+Step 1 — materialize the secret (run once per session, before the helper):
 ```
-# 1. write secret to a temp file (plaintext never returned to the agent)
-octo_management write-secret alias="octo-multica-key" filePath=".secrets/.tmp-mc-key" template="{{secret}}"
-# 2. use it
-K=$(cat .secrets/.tmp-mc-key)
-# ... curl calls ...
-# 3. wipe it
-shred -u .secrets/.tmp-mc-key 2>/dev/null || rm -f .secrets/.tmp-mc-key
+# octo_management write-secret writes the current plaintext to a fresh temp path.
+# Use a unique filename (mktemp) so concurrent sessions never clobber each other.
+octo_management write-secret alias="octo-multica-key" filePath=".secrets/.mc-key.<rand>" template="{{secret}}"
 ```
+When calling the octo_management tool, pick a random suffix for `<rand>` (e.g. a timestamp +
+random) so two parallel runs don't share a file.
 
-Never echo the full key, never paste it into octo messages, never commit it.
+Step 2 — load it with guaranteed cleanup, then define the `mc` helper:
+```bash
+# point at the temp file written in step 1
+MC_KEYFILE=".secrets/.mc-key.<rand>"
+MC_KEY=$(cat "$MC_KEYFILE")
+# wipe the on-disk copy immediately; keep the value only in this shell's memory
+shred -u "$MC_KEYFILE" 2>/dev/null || rm -f "$MC_KEYFILE"
+# belt-and-suspenders: scrub the var when the shell exits
+trap 'unset MC_KEY' EXIT
+
+MC_BASE=${MULTICA_CLOUD_BASE:-https://multica.imocto.cn}
+MC_WS=""   # set to a workspace id OR slug after discovery; leave empty for /api/me etc.
+
+# mc <METHOD> <path> [json-body]
+# - auto-injects auth + base URL
+# - auto-appends the workspace selector when MC_WS is set and the path has no '?'
+#   (uses workspace_id for a UUID, workspace_slug otherwise)
+mc() {
+  local method="$1" path="$2" body="${3:-}"
+  local url="$MC_BASE$path"
+  if [ -n "$MC_WS" ] && [[ "$path" != *\?* ]]; then
+    if [[ "$MC_WS" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+      url="$url?workspace_id=$MC_WS"
+    else
+      url="$url?workspace_slug=$MC_WS"
+    fi
+  fi
+  if [ -n "$body" ]; then
+    curl -fsS -m 30 -X "$method" -H "Authorization: Bearer $MC_KEY" \
+         -H "Content-Type: application/json" "$url" -d "$body"
+  else
+    curl -fsS -m 30 -X "$method" -H "Authorization: Bearer $MC_KEY" "$url"
+  fi
+}
+```
+Never echo `$MC_KEY`, never paste the key into octo messages, never commit it.
+
+### Error handling
+- `401 missing authorization` → key missing/invalid → re-run onboarding (have the user reconfigure
+  `octo-multica-key`).
+- `400 workspace_id or workspace_slug is required` → set `MC_WS` (or add `?workspace_id=`) first.
+- `429` → back off and retry with exponential delay; respect any `Retry-After`.
+- `5xx` → transient; retry once or twice, then report the failure with the status code.
+- `curl` exits non-zero (with `-fsS`) on HTTP errors → surface the message, don't silently continue.
+
+### Enum values (issue status / priority)
+- `status`: `backlog` | `todo` (default) | `in_progress` | `in_review` | `done` | `cancelled`
+- `priority`: `none` | `low` | `medium` | `high` | `urgent`
 
 ## Auth & request shape
 - Base URL: `https://multica.imocto.cn` (override via `MULTICA_CLOUD_BASE`).
@@ -71,21 +118,18 @@ Never echo the full key, never paste it into octo messages, never commit it.
 - List endpoints REQUIRE a workspace (else `400 workspace_id or workspace_slug is required`).
 
 ## Discovery first (do this before any workspace-scoped call)
-Never assume ids. Resolve them from the user's own account each session:
+Never assume ids. Resolve them from the user's own account each session (uses the `mc` helper above):
 
 ```bash
-K=$(cat .secrets/.tmp-mc-key)
-B=${MULTICA_CLOUD_BASE:-https://multica.imocto.cn}
-
-# 1. confirm identity / key validity
-curl -s -H "Authorization: Bearer $K" "$B/api/me"
+# 1. confirm identity / key validity (no workspace needed)
+mc GET /api/me
 
 # 2. list the workspaces THIS key can reach -> pick id/slug
-curl -s -H "Authorization: Bearer $K" "$B/api/workspaces"
+mc GET /api/workspaces
 
-# 3. with the chosen workspace, list its agents -> pick assignee_id
-WS=<chosen-workspace-id>
-curl -s -H "Authorization: Bearer $K" "$B/api/agents?workspace_id=$WS"
+# 3. lock in the chosen workspace, then list its agents -> pick assignee_id
+MC_WS=<chosen-workspace-id-or-slug>
+mc GET /api/agents          # MC_WS auto-appended as ?workspace_id=
 ```
 
 If the user has multiple workspaces, ask which one (or use the slug they named).
@@ -116,15 +160,22 @@ WS=<workspace-id-from-discovery>
 
 # list issues
 curl -s -H "Authorization: Bearer $K" "$B/api/issues?workspace_id=$WS"
+## Examples (with the `mc` helper)
+```bash
+MC_WS=<workspace-id-or-slug-from-discovery>
+
+# list issues
+mc GET /api/issues
 
 # create an issue assigned to an agent (agent id from /api/agents)
-curl -s -H "Authorization: Bearer $K" -H "Content-Type: application/json" \
-  "$B/api/issues?workspace_id=$WS" \
-  -d '{"title":"...","description":"...","assignee_type":"agent","assignee_id":"<agent-id>"}'
+mc POST /api/issues \
+  '{"title":"...","description":"...","priority":"high","assignee_type":"agent","assignee_id":"<agent-id>"}'
 
-# add a comment
-curl -s -H "Authorization: Bearer $K" -H "Content-Type: application/json" \
-  "$B/api/issues/<issue-id>/comments" -d '{"body":"..."}'
+# add a comment (path has its own segments; MC_WS still auto-appended)
+mc POST "/api/issues/<issue-id>/comments" '{"body":"..."}'
+
+# update an issue's status
+mc PUT "/api/issues/<issue-id>" '{"status":"in_progress"}'
 ```
 
 ## Safety / risk notes

@@ -89,6 +89,10 @@ Create an issue. Workspace via `?workspace_id=` or `X-Workspace-ID` header.
 ```
 `title` is the only required field. Assigning to an agent triggers that agent to start work.
 
+**Enum values:**
+- `status`: `backlog` | `todo` (default) | `in_progress` | `in_review` | `done` | `cancelled`
+- `priority`: `none` | `low` | `medium` | `high` | `urgent`
+
 ### `PUT /api/issues/<id>`
 Update fields (status / priority / assignee / etc.). Body is a partial issue object.
 
