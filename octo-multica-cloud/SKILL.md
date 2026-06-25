@@ -29,18 +29,23 @@ key is configured and, if not, walk the user through setup before doing anything
 要用这个 skill 调用 multica.imocto.cn，需要先配置你自己的 API 密钥：
 1. 打开 https://multica.imocto.cn → 登录 → Settings / 设置 → API Keys
 2. 新建一个 API Key，复制出来的 mul_… 字符串
-3. 在 octo 里把它存成密钥，别名必须叫 `octo-multica-key`
-   （直接把密钥发给我并说“存为 octo-multica-key”，我不会回显明文）
-配好后跟我说一声，我验证一下就能用了。
+3. 在 Octo 里打开「设置 → 密钥（Secrets）」模块，自己新增一条密钥：
+   别名填 octo-multica-key，把刚才复制的 Key 粘进去保存。
+   ⚠️ 千万别把 Key 发到聊天里（哪怕是发给我）——只要打到会话里就等于泄露。请务必在密钥模块里自己添加。
+配好后跟我说一声「已经存好了」，我验证一下就能用了。
 ```
 After the user says it's configured, re-run step 1 to confirm (200 from `/api/me`), then show the
-reachable workspaces. Never ask the user to paste the key into a normal chat message in plaintext
-beyond the secret-store flow; the secret tooling keeps the value out of the transcript.
+reachable workspaces. 🔴 NEVER ask the user to paste/send the API key into any chat message
+(not even a DM to you) — putting it in a conversation = leaking it. The key must be added by the
+user themselves in Octo's Settings → Secrets module; you only ever READ it from the secret store
+via `octo_management write-secret` (alias resolution), never receive it through chat.
 
 ## Setup (per user, one time) — what "configured" means
 The user stores their personal multica API token under the secret alias **`octo-multica-key`**
-(a `mul_…` token from the multica web app → Settings → API keys). Nothing else to configure.
-If `/api/me` returns `401 missing authorization`, the key is missing/invalid → re-run onboarding.
+(a `mul_…` token from the multica web app → Settings → API keys), **adding it themselves via
+Octo → Settings → Secrets**. Nothing else to configure. 🔴 The agent must never receive the raw
+key through chat — only read it from the secret store. If `/api/me` returns
+`401 missing authorization`, the key is missing/invalid → re-run onboarding.
 
 ## When to use
 - User asks to call / drive / read from `multica.imocto.cn` (the cloud multica web app).
@@ -138,19 +143,39 @@ If the user has multiple workspaces, ask which one (or use the slug they named).
 Full endpoint list, request/response shapes, and worked examples live in
 [`references/api.md`](references/api.md). Quick summary:
 
-**Read:** `/api/me`, `/api/workspaces`, `/api/agents`, `/api/issues` (+ `/search`, `/<id>`,
+**Read:** `/api/me`, `/api/workspaces`, `/api/agents`, `/api/squads`, `/api/issues` (+ `/search`, `/<id>`,
 `/<id>/comments`, `/<id>/task-runs`, `/<id>/pull-requests`, `/<id>/subscribers`),
-`/api/projects`, `/api/runtimes` (+ `/<id>/usage`, `/<id>/activity`), `/health`.
+`/api/projects`, `/api/runtimes` (+ `/<id>/usage`, `/<id>/activity`),
+`/api/webhook-subscriptions` (+ `/<id>/deliveries`), `/health`.
 
 **Write (use deliberately):** `POST /api/issues`, `PUT /api/issues/<id>`,
 `POST /api/issues/<id>/comments`, `POST /api/issues/<id>/rerun`,
 `POST /api/tasks/<taskId>/messages`, `POST /api/tasks/<taskId>/cancel`,
-`DELETE /api/comments/<id>`.
+`DELETE /api/comments/<id>`,
+`POST /api/webhook-subscriptions` (+ `PATCH`/`DELETE /<id>`, `POST /<id>/test`,
+`POST /<id>/deliveries/<deliveryId>/redeliver`).
+
+**Create agent / squad (verified live via REST 2026-06-25):**
+`POST /api/agents` (needs `name` + `runtime_id`), `POST /api/agents/<id>/archive`,
+`PUT /api/agents/<id>`; `POST /api/squads` (needs `name` + `leader_id`),
+`DELETE /api/squads/<id>`. So agent/squad creation **is** possible via IM/REST, not just Web.
 
 **Runtime management:** `GET /api/runtimes` (list), `GET /api/runtimes/<id>/usage`,
 `GET /api/runtimes/<id>/activity`, `POST /api/runtimes/<id>/update` (upgrade the runtime CLI
 to a target version), `POST /api/runtimes/<id>/archive-agents-and-delete` (archive its agents
 and remove the runtime). ⚠️ The last one is destructive — confirm before running.
+
+**Outbound webhooks (verified live via REST 2026-06-25):** Multica POSTs events to YOUR URL.
+Workspace-level or project-level scoped. `GET /api/webhook-subscriptions` (list; add
+`&project_id=<id>` to filter), `POST /api/webhook-subscriptions` (create — needs `url` + `events`;
+add `project_id` to scope to one project), `PATCH /api/webhook-subscriptions/<id>`,
+`DELETE /api/webhook-subscriptions/<id>`, `POST /api/webhook-subscriptions/<id>/test`,
+`GET /api/webhook-subscriptions/<id>/deliveries` (+ `/<deliveryId>`),
+`POST /api/webhook-subscriptions/<id>/deliveries/<deliveryId>/redeliver`.
+Supported events: `issue.status_changed` (only one for now). The signing `secret` (`whsec_…`) is
+returned **once on create** and never again (list/get only give `secret_hint` = last 4 chars) —
+capture it then. Multica signs each POST `X-Multica-Signature-256: sha256=<hex(HMAC-SHA256(body,secret))>`
+(+ `X-Multica-Event`, `X-Multica-Delivery` headers). See [`references/api.md`](references/api.md#outbound-webhook-subscriptions) for full shapes.
 
 ## Examples
 ```bash
