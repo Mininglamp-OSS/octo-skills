@@ -14,7 +14,7 @@ description: An OpenClaw loop-engineering standard built on octoim + octospec + 
 
 It upgrades "hand-prompting an agent" into "designing a system that prompts agents" (loop engineering). The three primitives of this loop already exist in the OpenClaw ecosystem but are scattered:
 
-- **octoim** — message / notification flow-back (dispatch visibility, sub-channel sync, notify-target).
+- **octo-im** — message / notification flow-back ([`Mininglamp-OSS/octo-im`](https://github.com/Mininglamp-OSS/octo-im); dispatch visibility, sub-channel sync, notify-target).
 - **octospec** — in-repo execution contract ([`Mininglamp-OSS/octo-spec`](https://github.com/Mininglamp-OSS/octo-spec); spec-only 4-phase flow + load-bearing rules + acceptance).
 - **octo-multica-cloud** — the portable cross-agent orchestration layer (the sibling skill in this repo) that exposes the cloud multica SaaS to any octo/OpenClaw user via a per-user `octo-multica-key`, discovering workspace/agent at runtime with zero hardcoded account ids.
 
@@ -28,8 +28,8 @@ octo-loop only works once all three primitives below are in place. Each line inc
 
 | Dependency | Why it's required | Readiness check |
 |---|---|---|
-| **octoim** | Progress flow-back: without it, dispatch visibility and `notify-target` delivery break, so status never returns to the dispatcher. | Confirm octo IM is wired for flow-back (you receive issue-status updates / `notify-target` reaches its destination). No single command — verify a test notification arrives. |
-| **octospec** | The in-repo execution contract (middle ring). The target repo **must** have been initialized first, producing `.octospec/rules/_index.yaml` and `tasks/_brief.template.md`; otherwise the middle ring degrades to an empty shell. Run `octospec init` in the repo if missing. | `ls .octospec/rules/_index.yaml` (exists = already initialized) |
+| **octo-im** | Progress flow-back: without it, dispatch visibility and `notify-target` delivery break, so status never returns to the dispatcher. | Confirm octo-im is wired for flow-back (you receive issue-status updates / `notify-target` reaches its destination). No single command — verify a test notification arrives. |
+| **octospec** | The in-repo execution contract (middle ring). The target repo **must** have been initialized first, producing `.octospec/rules/_index.yaml` and `tasks/_brief.template.md`; otherwise the middle ring degrades to an empty shell. If missing, onboard octo-spec into the repo: `cp -r <path-to>/octo-spec/templates/octospec-init .octospec` then `./.octospec/scripts/octospec-sync.sh` (or run the **octospec-init** skill; canonical reference: the [octo-spec README](https://github.com/Mininglamp-OSS/octo-spec#quick-start) onboarding). | `ls .octospec/rules/_index.yaml` (exists = already initialized) |
 | **octo-multica-cloud** | The orchestration access layer (outer ring). Configure your own `octo-multica-key` secret first (see that sibling skill's onboarding). Without a valid key, the outer ring cannot create/list issues or discover agents. | `mc GET /api/me` returns `200` (uses the `mc` helper from the octo-multica-cloud skill) |
 
 If any of the three is missing, the corresponding ring fails silently — that is exactly the failure mode the onboarding self-check is designed to catch.
@@ -42,19 +42,23 @@ On install, or the first time the user invokes anything in this skill, the agent
 
 **Onboarding flow the agent runs (the three readiness checks above):**
 1. **octo-multica-cloud** — materialize `octo-multica-key` and call `mc GET /api/me`. 200 → ready. No key / 401 → send the octo-multica-cloud setup guide and STOP.
-2. **octospec** — in the target repo, run `ls .octospec/rules/_index.yaml`. Present → ready. Missing → tell the user to run `octospec init` in that repo and STOP.
-3. **octoim** — confirm a test notification / status flow-back arrives. Working → ready. Otherwise → ask the user to wire octo IM flow-back and STOP.
+2. **octospec** — in the target repo, run `ls .octospec/rules/_index.yaml`. Present → ready. Missing → onboard octo-spec into the repo (`cp -r <path-to>/octo-spec/templates/octospec-init .octospec` then `./.octospec/scripts/octospec-sync.sh`, or run the **octospec-init** skill — see the [octo-spec README](https://github.com/Mininglamp-OSS/octo-spec#quick-start)) and STOP.
+3. **octo-im** — confirm a test notification / status flow-back arrives. Working → ready. Otherwise → ask the user to wire octo-im flow-back and STOP.
 
-Only when all three are green is the skill ready. Then read `config.yaml` (see Onboarding for new teams below) so the role placeholders resolve to real agents.
+Only when all three are green is the skill ready. Then load `config.yaml` (see Onboarding for new teams below) so the role placeholders resolve to real agents. **Missing-config branch**: a fresh install ships only `config.yaml.example`, not `config.yaml`. If `octo-loop/config.yaml` is absent, run `cp octo-loop/config.yaml.example octo-loop/config.yaml` and fill in the real values; if the values aren't available yet, STOP cleanly and ask the user for them rather than running with unresolved placeholders.
+
+> **Install order**: octo-loop's outer ring uses the `mc` helper from the sibling **octo-multica-cloud** skill, so install `octo-multica-cloud` first (it provides `mc` + the `octo-multica-key` setup); only then install and onboard octo-loop.
 
 **Setup guide to send the user (verbatim-friendly):**
 ```
 To use octo-loop, three building blocks must be ready:
 1. octo-multica-cloud — install the sibling skill and configure your `octo-multica-key`
    (multica web app → Settings → API Keys). Check: `mc GET /api/me` returns 200.
-2. octospec — in the repo you'll dispatch work into, run `octospec init`.
+2. octospec — in the repo you'll dispatch work into, onboard octo-spec if missing:
+   `cp -r <path-to>/octo-spec/templates/octospec-init .octospec` then `./.octospec/scripts/octospec-sync.sh`
+   (or use the octospec-init skill; canonical: https://github.com/Mininglamp-OSS/octo-spec#quick-start).
    Check: `ls .octospec/rules/_index.yaml` exists.
-3. octoim — make sure octo IM message flow-back is wired so notify-target reaches you.
+3. octo-im — make sure octo-im message flow-back is wired so notify-target reaches you.
 Tell me once these are set and I'll re-run the self-check.
 ```
 
@@ -85,7 +89,7 @@ Hard constraints:
 1. **plan-first by default**: for any code ticket, before dispatching the implementer, classify the tier and have `{{planner_name}}` produce a plan (lite: a few minutes to a 3-line machine-checkable acceptance + drift baseline / full: heavy tickets, cross-repo, P0, schema/API/security surface). The trivial escape hatch may skip this.
 2. **the dispatch brief MUST reference the repo's `.octospec/`**: the load-bearing list is derived from `rules/_index.yaml`, never recited from memory. This is the weld between the outer and middle rings.
 3. **dispatch via a multica issue, not a chat @**: issues are picked up asynchronously; chat @ gets lost. Issue operations go through the octo-multica-cloud `mc` helper (`mc POST /api/issues …`).
-4. **notify-target is mandatory**: append `notify-target:` (sub-channel + DM) to the end of every issue description, otherwise progress cannot flow back to the dispatcher (octoim flow-back depends on it).
+4. **notify-target is mandatory**: append `notify-target:` (sub-channel + DM) to the end of every issue description, otherwise progress cannot flow back to the dispatcher (octo-im flow-back depends on it).
 5. **review / audit / root-cause -> dispatch `{{reviewer_name}}` directly**; **E2E -> dispatch `{{qa_name}}` directly**; **repo-wide full audit / cross-system architecture review -> `{{auditor_name}}`** (large context, ingests the whole repo). Do NOT put a planning ticket in front of a review task — that is reviewing the review.
 
 ### Middle ring — execution loop (Execution, octospec 4-phase)
@@ -171,7 +175,7 @@ octo-loop ships de-branded. A new team makes it concrete via a gitignored `confi
 
 ### Install
 
-This is a standard AgentSkill. Use the repo's generic installer (no edit to `install.sh` needed — it copies by subdirectory name):
+This is a standard AgentSkill. **Install the sibling `octo-multica-cloud` skill first** (octo-loop's outer ring depends on its `mc` helper), then use the repo's generic installer (no edit to `install.sh` needed — it copies by subdirectory name):
 
 ```bash
 bash install.sh octo-loop
@@ -179,7 +183,7 @@ bash install.sh octo-loop
 curl -fsSL https://raw.githubusercontent.com/Mininglamp-OSS/octo-skills/main/install.sh | bash -s octo-loop
 ```
 
-After copying, the agent reads this `SKILL.md` and runs the **First-run onboarding** above (the three readiness checks), then loads `config.yaml`.
+After copying, the agent reads this `SKILL.md` and runs the **First-run onboarding** above (the three readiness checks), then — if `config.yaml` is missing — copies it from `config.yaml.example` and loads it.
 
 ---
 
@@ -190,6 +194,6 @@ After copying, the agent reads this `SKILL.md` and runs the **First-run onboardi
 - ❌ Finding a hole in the design and deviating on your own → violates V2, should STOP and report.
 - ❌ Still playing whack-a-mole on round 4 of the same PR → violates V3, should produce a holistic plan.
 - ❌ A dispatch brief that doesn't reference `.octospec/` rules → outer and middle rings unweld, load-bearing drifts by hearsay.
-- ❌ Dispatching without a notify-target → octoim flow-back breaks, progress can't return to a human.
+- ❌ Dispatching without a notify-target → octo-im flow-back breaks, progress can't return to a human.
 - ❌ Wiring the outer ring to a bare multica CLI / private instance instead of octo-multica-cloud → re-privatizes the loop; others can't run it.
 - ❌ A release/docs ticket with zero `.rs` changes that omits `context.yaml` → write `injected: []` explicitly so "skipped" is distinguishable from "omitted".
