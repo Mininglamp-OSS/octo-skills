@@ -10,6 +10,7 @@ Each subdirectory is a self-contained skill with a `SKILL.md` (and optional `ref
 | Skill | What it does |
 |---|---|
 | [`octo-multica-cloud`](octo-multica-cloud/) | Drive the cloud-hosted multica SaaS (`multica.imocto.cn`) from octo/OpenClaw — read/create issues, list agents, dispatch tasks, add comments — using a per-user `octo-multica-key` API key. Account-agnostic; discovers workspaces and agents at runtime. |
+| [`octo-loop`](octo-loop/) ⚗️ _experimental_ | An OpenClaw loop-engineering standard layered on octoim + octo-spec + octo-multica-cloud. A three-ring nested contract (orchestration / execution / verification) with a loop-uncheatable acceptance gate. De-branded with role placeholders; account-agnostic via octo-multica-cloud. Early access — efficacy still being validated by pilot data. |
 
 ## 🚀 Quick install (one line to your octo bot)
 

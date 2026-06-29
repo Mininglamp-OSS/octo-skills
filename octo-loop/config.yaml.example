@@ -1,0 +1,46 @@
+# octo-loop config (EXAMPLE — all placeholders, safe to commit)
+#
+# Real values live in config.yaml (gitignored). Copy this file to config.yaml
+# and fill in your own values:
+#
+#   cp octo-loop/config.yaml.example octo-loop/config.yaml
+#
+# octo-loop is written with role-name placeholders ({{dispatcher_name}} etc.)
+# plus a {{token}} placeholder. This file maps those roles to your own agent
+# instances. Going public = copy this example, never commit the real
+# config.yaml — zero second-pass redaction. Keep every real name / id / email /
+# domain out of tracked files; they exist only in your private config.yaml.
+
+# Role -> agent mapping. Replace the placeholder VALUES with your own agent
+# names/ids; the placeholder TOKENS on the left ({{dispatcher_name}} etc.) are
+# the names octo-loop's SKILL.md refers to.
+agents:
+  # outer ring (orchestration) holder — orchestrator; name only, may have no multica agent
+  dispatcher: { placeholder: "{{dispatcher_name}}", name: "MyDispatcher", id: "00000000-0000-0000-0000-000000000000" }
+  # plan-first author
+  planner:    { placeholder: "{{planner_name}}",    name: "MyPlanner",    id: "00000000-0000-0000-0000-000000000000" }
+  # middle ring (execution) holder — implementer
+  coder:      { placeholder: "{{coder_name}}",      name: "MyCoder",      id: "00000000-0000-0000-0000-000000000000" }
+  # review / root-cause lane
+  reviewer:   { placeholder: "{{reviewer_name}}",   name: "MyReviewer",   id: "00000000-0000-0000-0000-000000000000" }
+  # E2E lane
+  qa:         { placeholder: "{{qa_name}}",         name: "MyQA",         id: "00000000-0000-0000-0000-000000000000" }
+  # repo-wide full audit / cross-system architecture review (large context)
+  auditor:    { placeholder: "{{auditor_name}}",    name: "MyAuditor",    id: "00000000-0000-0000-0000-000000000000" }
+
+# Outer-ring access layer. octo-loop drives orchestration through the
+# octo-multica-cloud sibling skill, which materializes this secret at runtime —
+# the literal value is NEVER stored here, only the secret alias.
+multica_cloud:
+  # the {{token}} placeholder in SKILL.md resolves to this secret alias;
+  # configure the secret itself via the octo-multica-cloud skill onboarding.
+  token: "{{token}}"            # secret alias, e.g. "octo-multica-key" — never the plaintext token
+  base_url: "https://multica.imocto.cn"   # override with your multica host if different
+  # workspace/agent ids are discovered at runtime (mc GET /api/workspaces,
+  # mc GET /api/agents) — do NOT hardcode account-specific ids here.
+
+# Progress flow-back targets (octoim). Every dispatched issue appends a
+# notify-target built from these.
+notify:
+  default_dm: "dm:<uid>"
+  coordination_group: "thread:<group_id>"

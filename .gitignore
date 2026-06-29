@@ -1,0 +1,5 @@
+# Real (per-team) skill configs — keep only the *.example templates tracked.
+**/config.yaml
+
+# Materialized secrets (never commit plaintext keys/tokens).
+.secrets/
