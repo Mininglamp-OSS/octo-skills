@@ -1,10 +1,12 @@
 ---
 name: octo-loop
+status: experimental
 description: An OpenClaw loop-engineering standard built on octoim + octospec + octo-multica-cloud. A three-ring nested contract (orchestration / execution / verification) with a loop-uncheatable acceptance gate. Use when receiving a code-implementation / bug-fix / feature request, designing or reviewing cross-agent dispatch, or auditing whether a pipeline conforms to the loop standard. Triggers on "loop process", "engineering standard", "dispatch standard", "acceptance gate", "stop condition", "fake acceptance", "loop engineering". NOT for trivial one-line fixes / typos / pure config (use the trivial escape hatch and dispatch the implementer directly).
 ---
 
 # octo-loop — OpenClaw Loop Engineering Standard
 
+> **⚗️ Status: experimental (early access).** The methodology and its V1–V4 contracts are published now so teams can start dogfooding; their efficacy is still being validated by ongoing pilot data. Expect refinements. The `experimental` marker will be dropped once pilot data confirms the gates earn their keep.
 > **What it is**: an upper-layer composition standard layered on top of three public building blocks — it is a *methodology*, not a runnable dispatch adapter for any single repo.
 > **De-branded**: this skill is written with role-name placeholders (`{{dispatcher_name}}`/`{{planner_name}}`/`{{coder_name}}`/`{{reviewer_name}}`/`{{qa_name}}`/`{{auditor_name}}`) plus a `{{token}}` placeholder. Real names live only in a gitignored `config.yaml` you create from `config.yaml.example`. Going public = copy the example, never commit the real `config.yaml` — zero second-pass redaction.
 
