@@ -203,9 +203,63 @@ mc POST "/api/issues/<issue-id>/comments" '{"body":"..."}'
 mc PUT "/api/issues/<issue-id>" '{"status":"in_progress"}'
 ```
 
+## Using the `multica` CLI (optional — only for the execution plane)
+This skill's primary path is **REST** (the `mc` helper above). REST is the full *control plane*
+and is a **superset** of what the CLI exposes for driving the cloud (outbound webhooks, squad
+management, agent/runtime create are REST-only). So for control-plane work — create/assign issues,
+manage webhooks/squads/agents — **always use REST, never the CLI.**
+
+The CLI is worth reaching for in exactly one case: the **execution plane**, i.e. the local
+`daemon` that registers *this machine* as a runtime and actually executes assigned agent tasks.
+REST cannot do that; only the CLI daemon can.
+
+### Decision: REST or CLI?
+- Want to drive cloud Multica (issues, webhooks, squads, agents)? → **REST** (`mc` helper).
+- Want to turn the current machine into an agent-executing runtime? → **CLI `daemon`** (below).
+
+### 🔴 Hard rule: always use an isolated `--profile`
+The CLI stores auth + daemon state per profile. A machine may already have a **default profile
+pointing at a different (e.g. self-hosted) server** — using it would talk to the wrong server and
+clobber that config. The `--profile` flag fully isolates config, daemon state, and workspaces
+(verified: a `--profile` login leaves the default `~/.multica/config.json` byte-for-byte
+unchanged). So **every** CLI call for this skill MUST pass a dedicated `--profile` (e.g.
+`octocloud`) and `--server-url https://multica.imocto.cn`.
+
+### Setup (one time, isolated profile)
+The `octo-multica-key` works as the CLI login token (it is a `mul_…` user PAT). Materialize the
+secret as usual, then pass it via `--token="$MC_KEY"` (value comes from the shell var, not typed
+as a literal, so it does not land in shell history). Do NOT use `--token=-` (the CLI has no stdin
+mode; it reads `-` literally).
+```bash
+# MC_KEY already materialized + wiped-from-disk per "The key" section above
+multica --profile octocloud --server-url https://multica.imocto.cn login --token="$MC_KEY"
+multica --profile octocloud workspace list            # verify: lists cloud workspaces
+```
+
+### Start the runtime daemon (the actual CLI-only capability)
+```bash
+multica --profile octocloud workspace switch <id-or-slug>   # pick the workspace to serve
+multica --profile octocloud daemon start                    # registers this machine as a runtime
+multica --profile octocloud daemon status
+multica --profile octocloud daemon logs -f
+```
+The daemon is a long-running process. **Do not start it on the user's behalf without their
+explicit ask** — it consumes the machine and runs assigned tasks. Surface the commands and let
+the user decide.
+
+### CLI notes
+- The CLI requires its own install (`brew install multica-ai/tap/multica` or the install script);
+  if `command -v multica` is empty, only the REST path is available — that's fine, REST covers all
+  control-plane needs.
+- To remove the isolated profile later: `multica --profile octocloud auth logout` then
+  `rm -rf ~/.multica/profiles/octocloud`.
+- Never run CLI commands for this skill against the **default** profile.
+
 ## Safety / risk notes
-- ✅ Isolated from any local self-hosted multica daemon: different host, account, token, and code
-  path (curl-only, no CLI, never reads/writes `~/.multica/config.json`).
+- ✅ Control plane is curl-only and isolated from any local self-hosted multica daemon: different
+  host, account, token, and code path; the REST path never reads/writes `~/.multica/config.json`.
+  The optional CLI path (above) is for the execution-plane daemon only and MUST use an isolated
+  `--profile` so it never touches the default profile.
 - ⚠️ A multica API key is typically **account-scoped** — it may reach ALL of that user's
   workspaces and has **write** power (create/update issues, run agents). Confirm the target
   workspace before any write; don't write to the wrong workspace.
